@@ -113,8 +113,6 @@ unexport CDPATH
 # The "tools" are needed early, so put this first
 # Don't include stuff already done in $(LIBS)
 SUBDIRS	= tools \
-	  examples/standalone \
-	  examples/api
 
 .PHONY : $(SUBDIRS)
 
@@ -192,7 +190,6 @@ LIBS += drivers/video/libvideo.a
 LIBS += drivers/watchdog/libwatchdog.a
 LIBS += common/libcommon.a
 LIBS += libfdt/libfdt.a
-LIBS += api/libapi.a
 LIBS += post/libpost.a
 
 LIBS := $(addprefix $(obj),$(LIBS))
@@ -229,7 +226,7 @@ __LIBS := $(subst $(obj),,$(LIBS)) $(subst $(obj),,$(LIBBOARD))
 #########################################################################
 
 # Always append ALL so that arch config.mk's can add custom ones
-ALL +=  $(obj)u-boot.bin $(obj)System.map 
+ALL +=  $(obj)u-boot.bin  
 
 all:		$(ALL)
 
@@ -273,26 +270,11 @@ $(TIMESTAMP_FILE):
 		@date +'#define U_BOOT_DATE "%b %d %C%y"' > $@
 		@date +'#define U_BOOT_TIME "%T"' >> $@
 
-updater:
-		$(MAKE) -C tools/updater all || exit 1
-
 # Explicitly make _depend in subdirs containing multiple targets to prevent
 # parallel sub-makes creating .depend files simultaneously.
 depend dep:	$(TIMESTAMP_FILE) $(VERSION_FILE) $(obj)include/autoconf.mk
 		for dir in $(SUBDIRS) cpu/$(CPU) $(dir $(LDSCRIPT)) ; do \
 			$(MAKE) -C $$dir _depend ; done
-
-TAG_SUBDIRS = $(SUBDIRS)
-TAG_SUBDIRS += $(dir $(__LIBS))
-TAG_SUBDIRS += include
-			
-SYSTEM_MAP = \
-		$(NM) $1 | \
-		grep -v '\(compiled\)\|\(\.o$$\)\|\( [aUw] \)\|\(\.\.ng$$\)\|\(LASH[RL]DI\)' | \
-		LC_ALL=C sort
-$(obj)System.map:	$(obj)u-boot
-		@$(call SYSTEM_MAP,$<) > $(obj)System.map
-
 #
 # Auto-generate the autoconf.mk file (which is included by all makefiles)
 #
@@ -318,7 +300,7 @@ $(obj)include/autoconf.mk: $(obj)include/config.h
 else	# !config.mk
 all   $(obj)u-boot.bin $(obj)u-boot \
 $(filter-out tools,$(SUBDIRS)) $(TIMESTAMP_FILE) $(VERSION_FILE)  \
-updater  depend dep  $(obj)System.map:
+  depend dep :
 	@echo "System not configured - see README" >&2
 	@ exit 1
 
@@ -330,7 +312,7 @@ endif	# config.mk
 
 .PHONY : CHANGELOG
 CHANGELOG:
-	git log --no-merges | unexpand -a | sed -e 's/\s\s*$$//' > $@
+	@git log --no-merges | unexpand -a | sed -e 's/\s\s*$$//' > $@
 	
 #########################################################################
 
@@ -361,17 +343,6 @@ smdk2410_config	:	unconfig
 #########################################################################
 
 clean:
-	@rm -f $(obj)examples/standalone/82559_eeprom			  \
-	       $(obj)examples/standalone/atmel_df_pow2			  \
-	       $(obj)examples/standalone/eepro100_eeprom		  \
-	       $(obj)examples/standalone/hello_world			  \
-	       $(obj)examples/standalone/interrupt			  \
-	       $(obj)examples/standalone/mem_to_mem_idma2intr		  \
-	       $(obj)examples/standalone/sched				  \
-	       $(obj)examples/standalone/smc91111_eeprom		  \
-	       $(obj)examples/standalone/test_burst			  \
-	       $(obj)examples/standalone/timer
-	@rm -f $(obj)examples/api/demo{,.bin}
 	@rm -f $(obj)board/cray/L1/{bootscript.c,bootscript.image}	  \
 	       $(obj)board/netstar/{eeprom,crcek,crcit,*.srec,*.bin}	  \
 	       $(obj)board/trab/trab_fkt   $(obj)board/voiceblue/eeprom   \
@@ -402,9 +373,5 @@ mrproper \
 distclean:	clobber unconfig
 	rm -rf $(obj)*
 endif
-
-backup:
-	F=`basename $(TOPDIR)` ; cd .. ; \
-	gtar --force-local -zcvf `date "+$$F-%Y-%m-%d-%T.tar.gz"` $$F
 
 #########################################################################
