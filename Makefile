@@ -110,10 +110,6 @@ unexport CDPATH
 
 #########################################################################
 
-ifeq ($(ARCH),powerpc)
-ARCH = ppc
-endif
-
 # The "tools" are needed early, so put this first
 # Don't include stuff already done in $(LIBS)
 SUBDIRS	= tools \
@@ -147,17 +143,6 @@ include $(TOPDIR)/config.mk
 # U-Boot objects....order is important (i.e. start must be first)
 
 OBJS  = cpu/$(CPU)/start.o
-ifeq ($(CPU),i386)
-OBJS += cpu/$(CPU)/start16.o
-OBJS += cpu/$(CPU)/resetvec.o
-endif
-ifeq ($(CPU),ppc4xx)
-OBJS += cpu/$(CPU)/resetvec.o
-endif
-ifeq ($(CPU),mpc85xx)
-OBJS += cpu/$(CPU)/resetvec.o
-endif
-
 OBJS := $(addprefix $(obj),$(OBJS))
 
 LIBS  = lib_generic/libgeneric.a
@@ -168,9 +153,6 @@ LIBS += $(shell if [ -f board/$(VENDOR)/common/Makefile ]; then echo \
 LIBS += cpu/$(CPU)/lib$(CPU).a
 ifdef SOC
 LIBS += cpu/$(CPU)/$(SOC)/lib$(SOC).a
-endif
-ifeq ($(CPU),ixp)
-LIBS += cpu/ixp/npe/libnpe.a
 endif
 LIBS += lib_$(ARCH)/lib$(ARCH).a
 LIBS += fs/cramfs/libcramfs.a fs/fat/libfat.a fs/fdos/libfdos.a fs/jffs2/libjffs2.a \
@@ -199,18 +181,6 @@ LIBS += drivers/pci/libpci.a
 LIBS += drivers/pcmcia/libpcmcia.a
 LIBS += drivers/power/libpower.a
 LIBS += drivers/spi/libspi.a
-ifeq ($(CPU),mpc83xx)
-LIBS += drivers/qe/qe.a
-endif
-ifeq ($(CPU),mpc85xx)
-LIBS += drivers/qe/qe.a
-LIBS += cpu/mpc8xxx/ddr/libddr.a
-LIBS += cpu/mpc8xxx/lib8xxx.a
-endif
-ifeq ($(CPU),mpc86xx)
-LIBS += cpu/mpc8xxx/ddr/libddr.a
-LIBS += cpu/mpc8xxx/lib8xxx.a
-endif
 LIBS += drivers/rtc/librtc.a
 LIBS += drivers/serial/libserial.a
 LIBS += drivers/twserial/libtws.a
@@ -252,17 +222,6 @@ LDPPFLAGS += \
 	$(shell $(LD) --version | \
 	  sed -ne 's/GNU ld version \([0-9][0-9]*\)\.\([0-9][0-9]*\).*/-DLD_MAJOR=\1 -DLD_MINOR=\2/p')
 
-ifeq ($(CONFIG_NAND_U_BOOT),y)
-NAND_SPL = nand_spl
-U_BOOT_NAND = $(obj)u-boot-nand.bin
-endif
-
-ifeq ($(CONFIG_ONENAND_U_BOOT),y)
-ONENAND_IPL = onenand_ipl
-U_BOOT_ONENAND = $(obj)u-boot-onenand.bin
-ONENAND_BIN ?= $(obj)onenand_ipl/onenand-ipl-2k.bin
-endif
-
 __OBJS := $(subst $(obj),,$(OBJS))
 __LIBS := $(subst $(obj),,$(LIBS)) $(subst $(obj),,$(LIBBOARD))
 
@@ -270,66 +229,23 @@ __LIBS := $(subst $(obj),,$(LIBS)) $(subst $(obj),,$(LIBBOARD))
 #########################################################################
 
 # Always append ALL so that arch config.mk's can add custom ones
-ALL += $(obj)u-boot.srec $(obj)u-boot.bin $(obj)System.map $(U_BOOT_NAND) $(U_BOOT_ONENAND)
+ALL +=  $(obj)u-boot.bin $(obj)System.map 
 
 all:		$(ALL)
 
-$(obj)u-boot.hex:	$(obj)u-boot
-		$(OBJCOPY) ${OBJCFLAGS} -O ihex $< $@
-
-$(obj)u-boot.srec:	$(obj)u-boot
-		$(OBJCOPY) -O srec $< $@
-
 $(obj)u-boot.bin:	$(obj)u-boot
 		$(OBJCOPY) ${OBJCFLAGS} -O binary $< $@
-
-$(obj)u-boot.ldr:	$(obj)u-boot
-		$(CREATE_LDR_ENV)
-		$(LDR) -T $(CONFIG_BFIN_CPU) -c $@ $< $(LDR_FLAGS)
-
-$(obj)u-boot.ldr.hex:	$(obj)u-boot.ldr
-		$(OBJCOPY) ${OBJCFLAGS} -O ihex $< $@ -I binary
-
-$(obj)u-boot.ldr.srec:	$(obj)u-boot.ldr
-		$(OBJCOPY) ${OBJCFLAGS} -O srec $< $@ -I binary
-
-$(obj)u-boot.img:	$(obj)u-boot.bin
-		./tools/mkimage -A $(ARCH) -T firmware -C none \
-		-a $(TEXT_BASE) -e 0 \
-		-n $(shell sed -n -e 's/.*U_BOOT_VERSION//p' $(VERSION_FILE) | \
-			sed -e 's/"[	 ]*$$/ for $(BOARD) board"/') \
-		-d $< $@
-
-$(obj)u-boot.imx:       $(obj)u-boot.bin
-		$(obj)tools/mkimage -n $(IMX_CONFIG) -T imximage \
-		-e $(TEXT_BASE) -d $< $@
-
-$(obj)u-boot.kwb:       $(obj)u-boot.bin
-		$(obj)tools/mkimage -n $(KWD_CONFIG) -T kwbimage \
-		-a $(TEXT_BASE) -e $(TEXT_BASE) -d $< $@
-
-$(obj)u-boot.sha1:	$(obj)u-boot.bin
-		$(obj)tools/ubsha1 $(obj)u-boot.bin
-
-$(obj)u-boot.dis:	$(obj)u-boot
-		$(OBJDUMP) -d $< > $@
-
+		
 GEN_UBOOT = \
 		UNDEF_SYM=`$(OBJDUMP) -x $(LIBBOARD) $(LIBS) | \
 		sed  -n -e 's/.*\($(SYM_PREFIX)__u_boot_cmd_.*\)/-u\1/p'|sort|uniq`;\
 		cd $(LNDIR) && $(LD) $(LDFLAGS) $$UNDEF_SYM $(__OBJS) \
 			--start-group $(__LIBS) --end-group $(PLATFORM_LIBS) \
 			-Map u-boot.map -o u-boot
+			
 $(obj)u-boot:	depend $(SUBDIRS) $(OBJS) $(LIBBOARD) $(LIBS) $(LDSCRIPT) $(obj)u-boot.lds
 		$(GEN_UBOOT)
-ifeq ($(CONFIG_KALLSYMS),y)
-		smap=`$(call SYSTEM_MAP,u-boot) | \
-			awk '$$2 ~ /[tTwW]/ {printf $$1 $$3 "\\\\000"}'` ; \
-		$(CC) $(CFLAGS) -DSYSTEM_MAP="\"$${smap}\"" \
-			-c common/system_map.c -o $(obj)common/system_map.o
-		$(GEN_UBOOT) $(obj)common/system_map.o
-endif
-
+		
 $(OBJS):	depend
 		$(MAKE) -C cpu/$(CPU) $(if $(REMOTE_BUILD),$@,$(notdir $@))
 
@@ -347,19 +263,7 @@ $(LDSCRIPT):	depend
 
 $(obj)u-boot.lds: $(LDSCRIPT)
 		$(CPP) $(CPPFLAGS) $(LDPPFLAGS) -ansi -D__ASSEMBLY__ -P - <$^ >$@
-
-$(NAND_SPL):	$(TIMESTAMP_FILE) $(VERSION_FILE) $(obj)include/autoconf.mk
-		$(MAKE) -C nand_spl/board/$(BOARDDIR) all
-
-$(U_BOOT_NAND):	$(NAND_SPL) $(obj)u-boot.bin
-		cat $(obj)nand_spl/u-boot-spl-16k.bin $(obj)u-boot.bin > $(obj)u-boot-nand.bin
-
-$(ONENAND_IPL):	$(TIMESTAMP_FILE) $(VERSION_FILE) $(obj)include/autoconf.mk
-		$(MAKE) -C onenand_ipl/board/$(BOARDDIR) all
-
-$(U_BOOT_ONENAND):	$(ONENAND_IPL) $(obj)u-boot.bin
-		cat $(ONENAND_BIN) $(obj)u-boot.bin > $(obj)u-boot-onenand.bin
-
+		
 $(VERSION_FILE):
 		@( printf '#define U_BOOT_VERSION "U-Boot %s%s"\n' "$(U_BOOT_VERSION)" \
 		 '$(shell $(TOPDIR)/tools/setlocalversion $(TOPDIR))' ) > $@.tmp
@@ -369,14 +273,8 @@ $(TIMESTAMP_FILE):
 		@date +'#define U_BOOT_DATE "%b %d %C%y"' > $@
 		@date +'#define U_BOOT_TIME "%T"' >> $@
 
-gdbtools:
-		$(MAKE) -C tools/gdb all || exit 1
-
 updater:
 		$(MAKE) -C tools/updater all || exit 1
-
-env:
-		$(MAKE) -C tools/env all MTD_VERSION=${MTD_VERSION} || exit 1
 
 # Explicitly make _depend in subdirs containing multiple targets to prevent
 # parallel sub-makes creating .depend files simultaneously.
@@ -387,18 +285,7 @@ depend dep:	$(TIMESTAMP_FILE) $(VERSION_FILE) $(obj)include/autoconf.mk
 TAG_SUBDIRS = $(SUBDIRS)
 TAG_SUBDIRS += $(dir $(__LIBS))
 TAG_SUBDIRS += include
-
-tags ctags:
-		ctags -w -o $(obj)ctags `find $(TAG_SUBDIRS) \
-						-name '*.[chS]' -print`
-
-etags:
-		etags -a -o $(obj)etags `find $(TAG_SUBDIRS) \
-						-name '*.[chS]' -print`
-cscope:
-		find $(TAG_SUBDIRS) -name '*.[chS]' -print > cscope.files
-		cscope -b -q -k
-
+			
 SYSTEM_MAP = \
 		$(NM) $1 | \
 		grep -v '\(compiled\)\|\(\.o$$\)\|\( [aUw] \)\|\(\.\.ng$$\)\|\(LASH[RL]DI\)' | \
@@ -429,10 +316,9 @@ $(obj)include/autoconf.mk: $(obj)include/config.h
 
 #########################################################################
 else	# !config.mk
-all $(obj)u-boot.hex $(obj)u-boot.srec $(obj)u-boot.bin \
-$(obj)u-boot.img $(obj)u-boot.dis $(obj)u-boot \
-$(filter-out tools,$(SUBDIRS)) $(TIMESTAMP_FILE) $(VERSION_FILE) gdbtools \
-updater env depend dep tags ctags etags cscope $(obj)System.map:
+all   $(obj)u-boot.bin $(obj)u-boot \
+$(filter-out tools,$(SUBDIRS)) $(TIMESTAMP_FILE) $(VERSION_FILE)  \
+updater  depend dep  $(obj)System.map:
 	@echo "System not configured - see README" >&2
 	@ exit 1
 
@@ -444,11 +330,8 @@ endif	# config.mk
 
 .PHONY : CHANGELOG
 CHANGELOG:
-	git log --no-merges U-Boot-1_1_5.. | \
-	unexpand -a | sed -e 's/\s\s*$$//' > $@
-
-include/license.h: tools/bin2header COPYING
-	 cat COPYING | gzip -9 -c | ./tools/bin2header license_gzip > include/license.h
+	git log --no-merges | unexpand -a | sed -e 's/\s\s*$$//' > $@
+	
 #########################################################################
 
 unconfig:
@@ -489,25 +372,12 @@ clean:
 	       $(obj)examples/standalone/test_burst			  \
 	       $(obj)examples/standalone/timer
 	@rm -f $(obj)examples/api/demo{,.bin}
-	@rm -f $(obj)tools/bmp_logo	   $(obj)tools/easylogo/easylogo  \
-	       $(obj)tools/env/{fw_printenv,fw_setenv}			  \
-	       $(obj)tools/envcrc					  \
-	       $(obj)tools/gdb/{astest,gdbcont,gdbsend}			  \
-	       $(obj)tools/gen_eth_addr    $(obj)tools/img2srec		  \
-	       $(obj)tools/mkimage	   $(obj)tools/mpc86x_clk	  \
-	       $(obj)tools/ncb		   $(obj)tools/ubsha1
 	@rm -f $(obj)board/cray/L1/{bootscript.c,bootscript.image}	  \
 	       $(obj)board/netstar/{eeprom,crcek,crcit,*.srec,*.bin}	  \
 	       $(obj)board/trab/trab_fkt   $(obj)board/voiceblue/eeprom   \
 	       $(obj)board/armltd/{integratorap,integratorcp}/u-boot.lds  \
-	       $(obj)lib_blackfin/u-boot.lds				  \
 	       $(obj)u-boot.lds						  \
-	       $(obj)cpu/blackfin/bootrom-asm-offsets.[chs]
 	@rm -f $(obj)include/bmp_logo.h
-	@rm -f $(obj)nand_spl/{u-boot.lds,u-boot-spl,u-boot-spl.map,System.map}
-	@rm -f $(obj)onenand_ipl/onenand-{ipl,ipl.bin,ipl.map}
-	@rm -f $(ONENAND_BIN)
-	@rm -f $(obj)onenand_ipl/u-boot.lds
 	@rm -f $(TIMESTAMP_FILE) $(VERSION_FILE)
 	@find $(OBJTREE) -type f \
 		\( -name 'core' -o -name '*.bak' -o -name '*~' \
@@ -516,20 +386,14 @@ clean:
 
 clobber:	clean
 	@find $(OBJTREE) -type f \( -name .depend \
-		-o -name '*.srec' -o -name '*.bin' -o -name u-boot.img \) \
+		-o -name '*.srec' -o -name '*.bin'  \) \
 		-print0 \
 		| xargs -0 rm -f
-	@rm -f $(OBJS) $(obj)*.bak $(obj)ctags $(obj)etags $(obj)TAGS \
-		$(obj)cscope.* $(obj)*.*~
-	@rm -f $(obj)u-boot $(obj)u-boot.map $(obj)u-boot.hex $(ALL)
-	@rm -f $(obj)u-boot.kwb
-	@rm -f $(obj)u-boot.imx
-	@rm -f $(obj)tools/{env/crc32.c,inca-swap-bytes}
-	@rm -f $(obj)cpu/mpc824x/bedbug_603e.c
+	@rm -f $(OBJS) $(obj)*.bak $(obj)TAGS \
+		 $(obj)*.*~
+	@rm -f $(obj)u-boot $(obj)u-boot.map  $(ALL)
 	@rm -f $(obj)include/asm/proc $(obj)include/asm/arch $(obj)include/asm
-	@[ ! -d $(obj)nand_spl ] || find $(obj)nand_spl -name "*" -type l -print | xargs rm -f
-	@[ ! -d $(obj)onenand_ipl ] || find $(obj)onenand_ipl -name "*" -type l -print | xargs rm -f
-
+	
 ifeq ($(OBJTREE),$(SRCTREE))
 mrproper \
 distclean:	clobber unconfig
